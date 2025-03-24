@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">trinh_van_hao</string>
+    <string name="notification_channel_name">Weather App Notifications</string>
+    <string name="notification_channel_description">Notifications for weather app connectivity status</string>
+</resources>
