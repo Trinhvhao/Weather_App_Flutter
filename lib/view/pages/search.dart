@@ -256,7 +256,7 @@ class _SearchState extends State<Search> {
                                               ),
                                             ),
                                             Image.asset(
-                                              getWeatherIcon(
+                                              WeatherUtils.getWeatherIcon(
                                                   weeklyWeather.description ??
                                                       ''),
                                               height: myHeight * 0.06,
@@ -288,7 +288,7 @@ class _SearchState extends State<Search> {
                                                 weeklyWeather.description ??
                                                     'N/A',
                                                 style: TextStyle(
-                                                    fontSize: 18,
+                                                    fontSize: 15,
                                                     color: Colors.white
                                                         .withOpacity(0.5)),
                                                 maxLines: 2,

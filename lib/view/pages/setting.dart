@@ -18,15 +18,15 @@ class _SettingsPageState extends State<Setting> {
 
   Future<String> _getLastFetchTime() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('lastFetchTime') ?? 'Never';
+    return prefs.getString('lastFetchTime') ?? 'Chưa từng tải';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: const Color(0xff060720),
+        title: const Text('Cài đặt'),
+        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       ),
       body: Container(
         color: const Color(0xff060720),
@@ -71,12 +71,35 @@ class _SettingsPageState extends State<Setting> {
             }
           },
           builder: (context, state) {
+            // Hiển thị trạng thái loading
+            if (state is WeatherLoading) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      color: Colors.white,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Đang tải dữ liệu thời tiết...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Giao diện chính khi không ở trạng thái loading
             return Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
                 const Text(
-                  'Weather Data',
+                  'Dữ liệu thời tiết',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 30,
@@ -105,7 +128,7 @@ class _SettingsPageState extends State<Setting> {
                         vertical: 12, horizontal: 24),
                   ),
                   child: const Text(
-                    'Fetch Latest Weather Data',
+                    'Tải dữ liệu thời tiết mới nhất',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
@@ -117,7 +140,7 @@ class _SettingsPageState extends State<Setting> {
                       return const CircularProgressIndicator();
                     }
                     return Text(
-                      'Last Fetch Time: ${snapshot.data}',
+                      'Thời gian tải cuối: ${snapshot.data}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,

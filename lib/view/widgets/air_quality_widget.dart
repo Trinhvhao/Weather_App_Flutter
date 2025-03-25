@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:trinh_van_hao/model/weatherModel.dart';
 
@@ -42,7 +44,7 @@ class AirQualityWidget extends StatelessWidget {
           'level': 'Kém',
           'color': Colors.orange,
           'message':
-              'Chất lượng không khí trung bình, có thể gây ảnh hưởng đến nhóm nhạy cảm.',
+              'Chất lượng không khí trung bình, gây ảnh hưởng đến nhóm nhạy cảm.',
         };
       case 4:
         return {

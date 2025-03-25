@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trinh_van_hao/model/weatherModel.dart';
 import 'package:trinh_van_hao/services/database_service.dart';
-import 'package:trinh_van_hao/utils/static_file.dart';
+import 'package:trinh_van_hao/utils/weather_utils.dart';
 
 class WeatherService {
   static const String apiKey = '48bfbdeb553ac22ac63f77941b82cf66';
@@ -13,179 +13,127 @@ class WeatherService {
   final DatabaseService databaseService;
 
   WeatherService(this.databaseService);
+
   String mapWeatherIconToAsset(String iconCode) {
-    switch (iconCode) {
-      // Clear sky
-      case '01d':
-        return 'assets/img/13.png'; // Trời nắng ban ngày không mây
-      case '01n':
-        return 'assets/img/14.png'; // Ban đêm không mây
-
-      // Few clouds
-      case '02d':
-        return 'assets/img/1.png'; // Trời nắng có mây (ban ngày)
-      case '02n':
-        return 'assets/img/10.png'; // Trời tốt có mây (ban đêm)
-
-      // Scattered clouds
-      case '03d':
-        return 'assets/img/4.png'; // Mây
-      case '03n':
-        return 'assets/img/10.png'; // Trời tốt có mây (ban đêm)
-
-      // Broken clouds
-      case '04d':
-        return 'assets/img/4.png'; // Mây
-      case '04n':
-        return 'assets/img/10.png'; // Trời tốt có mây (ban đêm)
-
-      // Shower rain
-      case '09d':
-        return 'assets/img/5.png'; // Mưa
-      case '09n':
-        return 'assets/img/11.png'; // Trời tối có mây và mưa
-
-      // Rain
-      case '10d':
-        return 'assets/img/2.png'; // Ban ngày có mưa
-      case '10n':
-        return 'assets/img/11.png'; // Trời tối có mây và mưa
-
-      // Thunderstorm
-      case '11d':
-        return 'assets/img/7.png'; // Mưa kèm sét
-      case '11n':
-        return 'assets/img/7.png'; // Mưa kèm sét
-
-      // Snow
-      case '13d':
-        return 'assets/img/3.png'; // Ban ngày có tuyết
-      case '13n':
-        return 'assets/img/12.png'; // Trời tối có tuyết
-
-      // Mist
-      case '50d':
-        return 'assets/img/4.png'; // Mây
-      case '50n':
-        return 'assets/img/10.png'; // Trời tốt có mây (ban đêm)
-
-      // Mặc định
-      default:
-        return 'assets/img/4.png'; // Mây
-    }
+    const iconMap = {
+      '01d': 'assets/img/13.png', // Trời nắng ban ngày
+      '01n': 'assets/img/14.png', // Ban đêm không mây
+      '02d': 'assets/img/1.png', // Trời nắng có mây (ban ngày)
+      '02n': 'assets/img/10.png', // Trời tốt có mây (ban đêm)
+      '03d': 'assets/img/4.png', // Mây
+      '03n': 'assets/img/10.png', // Trời tốt có mây (ban đêm)
+      '04d': 'assets/img/4.png', // Mây
+      '04n': 'assets/img/10.png', // Trời tốt có mây (ban đêm)
+      '09d': 'assets/img/5.png', // Mưa
+      '09n': 'assets/img/11.png', // Trời tối có mây và mưa
+      '10d': 'assets/img/2.png', // Ban ngày có mưa
+      '10n': 'assets/img/11.png', // Trời tối có mây và mưa
+      '11d': 'assets/img/7.png', // Mưa kèm sét
+      '11n': 'assets/img/7.png', // Mưa kèm sét
+      '13d': 'assets/img/3.png', // Ban ngày có tuyết
+      '13n': 'assets/img/12.png', // Trời tối có tuyết
+      '50d': 'assets/img/4.png', // Mây
+      '50n': 'assets/img/10.png', // Trời tốt có mây (ban đêm)
+    };
+    return iconMap[iconCode] ?? 'assets/img/4.png'; // Mặc định là mây
   }
 
   Future<List<WeatherModel>> fetchWeatherData() async {
-    List<WeatherModel> weatherList = [];
     try {
-      // Fetch dữ liệu từ API
-      weatherList = await _fetchWeatherFromApi();
-
-      // Lưu dữ liệu vào Firestore
-      for (var weather in weatherList) {
-        String apiCityName = StaticFile.apiLocations.firstWhere(
-          (city) => StaticFile.locationNameMap[city] == weather.name,
-          orElse: () => '',
-        );
-        if (apiCityName.isNotEmpty) {
-          await databaseService.saveWeatherData(apiCityName, weather);
-        }
-      }
-
-      // Lưu thời gian fetch cuối cùng vào shared_preferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('lastFetchTime', DateTime.now().toIso8601String());
+      final weatherList = await _fetchWeatherFromApi();
+      print('Đã lấy dữ liệu thời tiết: $weatherList');
+      await _saveWeatherData(weatherList);
+      return weatherList;
     } catch (e) {
-      print('Error in fetchWeatherData: $e');
+      print('Lỗi khi lấy dữ liệu thời tiết: $e');
       rethrow;
     }
-    return weatherList;
+  }
+
+  Future<void> _saveWeatherData(List<WeatherModel> weatherList) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lastFetchTime', DateTime.now().toIso8601String());
+    for (var weather in weatherList) {
+      String apiCityName = WeatherUtils.apiLocations.firstWhere(
+        (city) => WeatherUtils.locationNameMap[city] == weather.name,
+        orElse: () => '',
+      );
+      if (apiCityName.isNotEmpty) {
+        await databaseService.saveWeatherData(apiCityName, weather);
+      }
+    }
   }
 
   Future<List<WeatherModel>> _fetchWeatherFromApi() async {
     List<WeatherModel> weatherList = [];
-    try {
-      if (StaticFile.cityCoordinates.isEmpty) {
-        print('Error: cityCoordinates is empty');
-        throw Exception('cityCoordinates is empty');
+    if (WeatherUtils.cityCoordinates.isEmpty) {
+      print('Lỗi: Danh sách tọa độ thành phố trống');
+      throw Exception('cityCoordinates is empty');
+    }
+
+    for (var cityEntry in WeatherUtils.cityCoordinates.entries) {
+      final cityNameEn = cityEntry.key;
+      final coords = cityEntry.value;
+      if (!coords.containsKey('lat') || !coords.containsKey('lon')) {
+        print('Thiếu tọa độ lat hoặc lon cho $cityNameEn: $coords');
+        continue;
       }
 
-      for (var cityEntry in StaticFile.cityCoordinates.entries) {
-        final String cityNameEn = cityEntry.key;
-        final Map<String, double> coords = cityEntry.value;
+      final lat = coords['lat']!;
+      final lon = coords['lon']!;
+      final cityName = WeatherUtils.locationNameMap[cityNameEn] ?? cityNameEn;
 
-        if (!coords.containsKey('lat') || !coords.containsKey('lon')) {
-          print('Missing lat or lon for $cityNameEn: $coords');
-          continue;
-        }
+      final weatherData = await _fetchApiData(
+          '$baseUrl/forecast?lat=$lat&lon=$lon&appid=$apiKey&units=metric',
+          cityName);
+      if (weatherData == null) continue;
 
-        final double lat = coords['lat']!;
-        final double lon = coords['lon']!;
-        final String cityName =
-            StaticFile.locationNameMap[cityNameEn] ?? cityNameEn;
+      final airQualityData = await _fetchApiData(
+          '$baseUrl/air_pollution?lat=$lat&lon=$lon&appid=$apiKey', cityName);
+      if (airQualityData == null) continue;
 
-        // Lấy dữ liệu thời tiết 5 ngày
-        final weatherResponse = await http.get(Uri.parse(
-            '$baseUrl/forecast?lat=$lat&lon=$lon&appid=$apiKey&units=metric'));
-        if (weatherResponse.statusCode != 200) {
-          print(
-              'Failed to load weather data for $cityName: ${weatherResponse.body}');
-          continue;
-        }
-
-        final weatherData = jsonDecode(weatherResponse.body);
-        if (weatherData['list'] == null ||
-            (weatherData['list'] as List).isEmpty) {
-          print('Weather data list is empty for $cityName');
-          continue;
-        }
-
-        List<WeeklyWeather> weeklyWeather =
-            _calculateDailyWeather(weatherData['list']);
-
-        // Lấy dữ liệu chất lượng không khí
-        final airQualityResponse = await http.get(Uri.parse(
-            '$baseUrl/air_pollution?lat=$lat&lon=$lon&appid=$apiKey'));
-        if (airQualityResponse.statusCode != 200) {
-          print(
-              'Failed to load air quality data for $cityName: ${airQualityResponse.body}');
-          continue; // Bỏ qua thành phố nếu không lấy được dữ liệu chất lượng không khí
-        }
-
-        final airQualityData = jsonDecode(airQualityResponse.body);
-        final airQuality = _parseAirQuality(airQualityData);
-
-        weatherList.add(WeatherModel(
-          name: cityName,
-          weeklyWeather: weeklyWeather,
-          airQuality: airQuality,
-          lastUpdated: DateTime.now(),
-        ));
-      }
-    } catch (e) {
-      print('Error in _fetchWeatherFromApi: $e');
-      rethrow;
+      weatherList.add(WeatherModel(
+        name: cityName,
+        weeklyWeather: _calculateDailyWeather(weatherData['list']),
+        airQuality: _parseAirQuality(airQualityData),
+        lastUpdated: DateTime.now(),
+      ));
     }
     return weatherList;
   }
 
+  Future<Map<String, dynamic>?> _fetchApiData(
+      String url, String cityName) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) {
+        print('Không thể tải dữ liệu cho $cityName: ${response.body}');
+        return null;
+      }
+      final data = jsonDecode(response.body);
+      if (data['list'] == null || (data['list'] as List).isEmpty) {
+        print('Danh sách dữ liệu trống cho $cityName');
+        return null;
+      }
+      return data;
+    } catch (e) {
+      print('Lỗi khi gọi API cho $cityName: $e');
+      return null;
+    }
+  }
+
   List<WeeklyWeather> _calculateDailyWeather(List<dynamic> weatherList) {
     Map<String, List<Map<String, dynamic>>> dailyData = {};
-
     for (var entry in weatherList) {
       final dateTime = DateTime.fromMillisecondsSinceEpoch(entry['dt'] * 1000);
       final dateKey = DateFormat('yyyy-MM-dd').format(dateTime);
-      if (!dailyData.containsKey(dateKey)) {
-        dailyData[dateKey] = [];
-      }
-      dailyData[dateKey]!.add(entry);
+      dailyData.putIfAbsent(dateKey, () => []).add(entry);
     }
 
     List<WeeklyWeather> weeklyWeather = [];
     int dayIndex = 0;
 
-    for (var entry in dailyData.entries) {
-      final dailyEntries = entry.value;
+    for (var dailyEntries in dailyData.values) {
       List<double> temps = [];
       List<String> hours = [];
       List<String> imgs = [];
@@ -201,62 +149,53 @@ class WeatherService {
         hours.add(DateFormat('HH:mm').format(dateTime));
         winds.add(hourlyData['wind']['speed'].toDouble() * 3.6);
         humidities.add(hourlyData['main']['humidity']);
-
-        if (hourlyData['weather'] != null && hourlyData['weather'].isNotEmpty) {
-          String iconCode = hourlyData['weather'][0]['icon'] ?? '01d';
-          String mappedIcon = mapWeatherIconToAsset(iconCode);
-          imgs.add(mappedIcon);
-          if (description == 'N/A') {
-            description = hourlyData['weather'][0]['description'] ?? 'N/A';
-            mainImg = mappedIcon;
-          }
-        } else {
-          imgs.add('assets/img/4.png');
+        final weather = hourlyData['weather']?.isNotEmpty == true
+            ? hourlyData['weather'][0]
+            : null;
+        final iconCode = weather?['icon'] ?? '01d';
+        final mappedIcon = mapWeatherIconToAsset(iconCode);
+        imgs.add(mappedIcon);
+        if (description == 'N/A' && weather != null) {
+          description = weather['description'] ?? 'N/A';
+          mainImg = mappedIcon;
         }
       }
 
       double avgTemp =
           temps.isNotEmpty ? temps.reduce((a, b) => a + b) / temps.length : 0.0;
-
       weeklyWeather.add(WeeklyWeather(
         allTime: AllTime(
-          hour: hours,
-          temps: temps,
-          img: imgs,
-          wind: winds,
-          humidities: humidities,
-        ),
+            hour: hours,
+            temps: temps,
+            img: imgs,
+            wind: winds,
+            humidities: humidities),
         description: description,
         mainImg: mainImg,
         avgTemp: avgTemp,
       ));
 
-      dayIndex++;
-      if (dayIndex >= 5) break;
+      if (++dayIndex >= 5) break;
     }
-
     return weeklyWeather;
   }
 
   AirQuality _parseAirQuality(Map<String, dynamic> airQualityData) {
-    if (airQualityData['list'] == null ||
-        (airQualityData['list'] as List).isEmpty) {
-      throw Exception('Air quality data is empty or invalid');
-    }
-
-    final listData = airQualityData['list'][0];
+    final listData = airQualityData['list']?[0];
+    if (listData == null)
+      throw Exception('Dữ liệu chất lượng không khí trống hoặc không hợp lệ');
     final components = listData['components'] ?? {};
     return AirQuality(
       aqi: listData['main']?['aqi'] ?? 0,
       components: {
-        'co': (components['co'] ?? 0).toDouble(),
-        'nh3': (components['nh3'] ?? 0).toDouble(),
-        'no': (components['no'] ?? 0).toDouble(),
-        'no2': (components['no2'] ?? 0).toDouble(),
-        'o3': (components['o3'] ?? 0).toDouble(),
-        'so2': (components['so2'] ?? 0).toDouble(),
-        'pm2_5': (components['pm2_5'] ?? 0).toDouble(),
-        'pm10': (components['pm10'] ?? 0).toDouble(),
+        'co': components['co']?.toDouble() ?? 0.0,
+        'nh3': components['nh3']?.toDouble() ?? 0.0,
+        'no': components['no']?.toDouble() ?? 0.0,
+        'no2': components['no2']?.toDouble() ?? 0.0,
+        'o3': components['o3']?.toDouble() ?? 0.0,
+        'so2': components['so2']?.toDouble() ?? 0.0,
+        'pm2_5': components['pm2_5']?.toDouble() ?? 0.0,
+        'pm10': components['pm10']?.toDouble() ?? 0.0,
       },
       dt: listData['dt'] as int?,
     );

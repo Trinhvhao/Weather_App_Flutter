@@ -1,4 +1,3 @@
-// ignore_for_file: depend_on_referenced_packages
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -7,60 +6,138 @@ import 'package:trinh_van_hao/services/database_service.dart';
 import 'package:trinh_van_hao/services/network_serice.dart';
 import 'package:trinh_van_hao/services/notification_service.dart';
 import 'package:trinh_van_hao/services/weather_service.dart';
-import 'package:trinh_van_hao/utils/static_file.dart';
+import 'package:trinh_van_hao/utils/weather_utils.dart';
 import 'weather_event.dart';
 import 'weather_state.dart';
 
 class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
+  // Instance của WeatherService dùng để lấy dữ liệu thời tiết từ API
   final WeatherService weatherService;
+  // Instance của DatabaseService dùng để tương tác với Firestore
   final DatabaseService databaseService;
+  // Bộ đếm thời gian để tự động cập nhật dữ liệu mỗi giờ.
   Timer? _updateTimer;
+  // Biến boolean để kiểm tra lần tải đầu tiên
   bool _isFirstLoad = true;
-  StreamSubscription? _connectivitySubscription;
+  // Biến boolean để theo dõi trạng thái kết nối mạng.
   bool _isConnected = true;
+  // Đăng ký lắng nghe sự thay đổi kết nối
+  StreamSubscription? _connectivitySubscription;
 
+  // Khởi tạo WeatherBloc và thiết lập các xử lý ban đầu
   WeatherBloc(this.weatherService, this.databaseService)
       : super(WeatherInitial(isConnected: true)) {
-    on<FetchWeather>(_onFetchWeather);
-    on<SelectHour>(_onSelectHour);
-    on<SwitchTab>(_onSwitchTab);
-    on<InitializeData>(_onInitializeData);
-    on<UpdateWeatherData>(_onUpdateWeatherData);
-    on<SelectCity>(_onSelectCity);
+    on<FetchWeather>(_fetchWeather);
+    on<SelectHour>(_selectHour);
+    on<SwitchTab>(_switchTab);
+    on<InitializeData>(_initializeData);
+    on<UpdateWeatherData>(_updateWeatherData);
+    on<SelectCity>(_selectCity);
 
-    _checkInitialConnectivity();
-    _startUpdateTimer();
-    _listenToConnectivityChanges();
+    _checkConnectivity(); // Kiểm tra kết nối mạng ban đầu.
+    _startUpdateTimer(); // Thiết lập bộ đếm thời gian để tự động cập nhật dữ liệu.
+    _listenToConnectivity(); // Lắng nghe sự thay đổi kết nối mạng.
   }
 
-  @override
-  Future<void> close() {
-    _updateTimer?.cancel();
-    _connectivitySubscription?.cancel();
-    return super.close();
+  // --- Hàm phụ trợ (Helper Functions) ---
+
+  // Tìm giờ gần nhất với thời gian hiện tại để hiển thị thời tiết theo giờ
+  int _findNearestHour(AllTime? allTime) {
+    if (allTime == null || allTime.hour.isEmpty) return 0;
+    DateTime now = DateTime.now();
+    int currentMinutes = now.hour * 60 + now.minute;
+    int nearestIndex = 0;
+    int minDiff = 24 * 60;
+
+    for (int i = 0; i < allTime.hour.length; i++) {
+      List<String> parts = allTime.hour[i].split(':');
+      int hourMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      int diff = (hourMinutes - currentMinutes).abs();
+      if (diff < minDiff) {
+        minDiff = diff;
+        nearestIndex = i;
+      }
+    }
+    return nearestIndex;
   }
 
-  void _startUpdateTimer() {
-    _updateTimer = Timer.periodic(Duration(hours: 1), (timer) {
-      add(UpdateWeatherData());
-    });
+  // Tìm khung giờ tiếp theo (sau thời gian hiện tại) để hiển thị thông báo
+  int _findNextHour(AllTime? allTime) {
+    if (allTime == null || allTime.hour.isEmpty) return 0;
+    DateTime now = DateTime.now();
+    int currentMinutes = now.hour * 60 + now.minute;
+    int nextIndex = 0;
+    int minDiff = 24 * 60;
+
+    for (int i = 0; i < allTime.hour.length; i++) {
+      List<String> parts = allTime.hour[i].split(':');
+      int hourMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      if (hourMinutes > currentMinutes) {
+        int diff = hourMinutes - currentMinutes;
+        if (diff < minDiff) {
+          minDiff = diff;
+          nextIndex = i;
+        }
+      }
+    }
+    return minDiff == 24 * 60 ? 0 : nextIndex;
   }
 
-  Future<void> _checkInitialConnectivity() async {
-    _isConnected = await NetworkService.isConnected();
-    if (state is WeatherLoaded) {
-      final currentState = state as WeatherLoaded;
-      emit(currentState.copyWith(isConnected: _isConnected));
-    } else {
-      emit(WeatherInitial(isConnected: _isConnected));
+  // Hiển thị thông báo về thời tiết cho khung giờ tiếp theo của thành phố hiện tại
+  void _showNextHourNotification(List<WeatherModel> weatherList) {
+    if (weatherList[WeatherUtils.myLocationIndex].weeklyWeather.isNotEmpty) {
+      final allTime =
+          weatherList[WeatherUtils.myLocationIndex].weeklyWeather[0].allTime;
+      if (allTime != null && allTime.hour.isNotEmpty) {
+        int nextHourIndex = _findNextHour(allTime);
+        String city = weatherList[WeatherUtils.myLocationIndex].name!;
+        String hour = allTime.hour[nextHourIndex];
+        double temp = allTime.temps[nextHourIndex];
+        String desc = weatherList[WeatherUtils.myLocationIndex]
+                .weeklyWeather[0]
+                .description ??
+            'N/A';
+        print(
+            'Hiển thị thông báo cho khung giờ tiếp theo: $city, $hour, $temp°C, $desc');
+        NotificationService.showNotification(
+          id: 2,
+          title: 'Thời tiết sắp tới',
+          body: 'Thời tiết tại $city vào $hour: $desc, $temp°C.',
+        );
+      }
     }
   }
 
-  void _listenToConnectivityChanges() {
-    _connectivitySubscription = NetworkService.connectivityStream.listen(
-        (List<ConnectivityResult> result) {
+  // Lấy dữ liệu thời tiết, ưu tiên từ API nếu có mạng, hoặc từ Firestore nếu không có mạng
+  Future<List<WeatherModel>> _getWeatherData() async {
+    _isConnected = await NetworkService.isConnected();
+    if (!_isConnected) {
+      print('Không có kết nối mạng, sử dụng dữ liệu từ Firestore');
+      final weatherMap = await databaseService.fetchAllWeatherData();
+      if (weatherMap.isEmpty)
+        throw Exception('Không có dữ liệu trong Firestore');
+      return weatherMap.values.toList();
+    }
+    final weatherList = await weatherService.fetchWeatherData();
+    if (weatherList.isEmpty) throw Exception('Không có dữ liệu từ API');
+    return weatherList;
+  }
+
+  // --- Hàm quản lý kết nối ---
+
+  // Kiểm tra trạng thái kết nối mạng ban đầu khi WeatherBloc được khởi tạo
+  Future<void> _checkConnectivity() async {
+    _isConnected = await NetworkService.isConnected();
+    print('Kiểm tra kết nối ban đầu: $_isConnected');
+    emit(WeatherInitial(isConnected: _isConnected));
+  }
+
+  // Lắng nghe sự thay đổi kết nối mạng trong suốt vòng đời của ứng dụng
+  void _listenToConnectivity() {
+    _connectivitySubscription =
+        NetworkService.connectivityStream.listen((result) {
       print('Connectivity stream event: $result');
-      final isConnected = !result.contains(ConnectivityResult.none);
+      bool isConnected = !result.contains(ConnectivityResult.none);
       print('Computed isConnected: $isConnected');
       print('Previous _isConnected: $_isConnected');
       if (_isConnected != isConnected) {
@@ -71,18 +148,10 @@ class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
           NotificationService.showNotification(
             id: 0,
             title: 'Mất kết nối mạng',
-            body: 'Ứng dụng đang sử dụng dữ liệu cục bộ.',
+            body: 'Dữ liệu cục bộ đang được sử dụng.',
           );
         }
-        if (state is WeatherLoaded) {
-          final currentState = state as WeatherLoaded;
-          emit(currentState.copyWith(isConnected: isConnected));
-        } else if (state is WeatherInitial) {
-          emit(WeatherInitial(isConnected: isConnected));
-        } else if (state is WeatherError) {
-          final errorState = state as WeatherError;
-          emit(WeatherError(errorState.message, isConnected: isConnected));
-        }
+        _updateStateWithConnection(isConnected);
       } else {
         print('No change in connectivity state');
       }
@@ -91,199 +160,120 @@ class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
     });
   }
 
-  Future<void> _onFetchWeather(
+  // Cập nhật trạng thái hiện tại với giá trị isConnected mới khi trạng thái kết nối mạng thay đổi
+  void _updateStateWithConnection(bool isConnected) {
+    if (state is WeatherLoaded) {
+      emit((state as WeatherLoaded).copyWith(isConnected: isConnected));
+    } else if (state is WeatherError) {
+      emit(WeatherError((state as WeatherError).message,
+          isConnected: isConnected));
+    } else {
+      emit(WeatherInitial(isConnected: isConnected));
+    }
+  }
+
+  // --- Hàm xử lý sự kiện (Event Handlers) ---
+
+  // Xử lý sự kiện FetchWeather, lấy dữ liệu thời tiết và cập nhật trạng thái
+  Future<void> _fetchWeather(
       FetchWeather event, Emitter<WeatherState> emit) async {
     emit(WeatherLoading(isConnected: _isConnected));
     try {
-      bool isConnected = await NetworkService.isConnected();
-      _isConnected = isConnected;
-      if (!isConnected) {
-        print('Không có kết nối mạng, sử dụng dữ liệu từ Firestore');
-        final weatherMap = await databaseService.fetchAllWeatherData();
-        final weatherList = weatherMap.values.toList();
-        if (weatherList.isEmpty) {
-          throw Exception('Không có dữ liệu thời tiết trong Firestore');
-        }
-        emit(WeatherLoaded(weatherList: weatherList, isConnected: false));
-        return;
-      }
-
-      final weatherList = await weatherService.fetchWeatherData();
-      if (weatherList.isEmpty) {
-        throw Exception('Không có dữ liệu thời tiết từ API');
-      }
-      print('Dữ liệu đã được lấy thành công từ API: $weatherList');
-      emit(WeatherLoaded(weatherList: weatherList, isConnected: true));
+      List<WeatherModel> weatherList = await _getWeatherData();
+      print(
+          'Dữ liệu đã được lấy thành công từ API hoặc Firestore: $weatherList');
+      _showNextHourNotification(weatherList);
+      emit(WeatherLoaded(weatherList: weatherList, isConnected: _isConnected));
       add(InitializeData());
     } catch (e) {
-      emit(WeatherError('Không thể tải dữ liệu từ API: $e',
-          isConnected: _isConnected));
+      print('Lỗi khi tải dữ liệu: $e');
+      emit(WeatherError('Lỗi tải dữ liệu: $e', isConnected: _isConnected));
     }
   }
 
-  Future<void> _onSelectHour(
-      SelectHour event, Emitter<WeatherState> emit) async {
+  // Xử lý sự kiện SelectHour, cập nhật chỉ số giờ được chọn trong trạng thái
+  Future<void> _selectHour(SelectHour event, Emitter<WeatherState> emit) async {
     if (state is WeatherLoaded) {
-      final currentState = state as WeatherLoaded;
-      emit(currentState.copyWith(
-        hourIndex: event.hourIndex,
-      ));
+      emit((state as WeatherLoaded).copyWith(hourIndex: event.hourIndex));
     }
   }
 
-  Future<void> _onSwitchTab(SwitchTab event, Emitter<WeatherState> emit) async {
+  // Xử lý sự kiện SwitchTab, cập nhật tab hiện tại (dự báo hoặc không khí) trong trạng thái
+  Future<void> _switchTab(SwitchTab event, Emitter<WeatherState> emit) async {
     if (state is WeatherLoaded) {
-      final currentState = state as WeatherLoaded;
-      emit(currentState.copyWith(isForecastTab: event.isForecastTab));
+      emit((state as WeatherLoaded)
+          .copyWith(isForecastTab: event.isForecastTab));
     }
   }
 
-  Future<void> _onInitializeData(
+  // Xử lý sự kiện InitializeData, khởi tạo dữ liệu sau khi lấy thành công
+  Future<void> _initializeData(
       InitializeData event, Emitter<WeatherState> emit) async {
     if (state is WeatherLoaded) {
       final currentState = state as WeatherLoaded;
-      final weatherList = currentState.weatherList;
-
-      int myLocationIndex = 0;
-      for (var i = 0; i < weatherList.length; i++) {
-        if (weatherList[i].name == currentState.myLocation) {
-          myLocationIndex = i;
-          break;
-        }
-      }
-      StaticFile.myLocationIndex = myLocationIndex;
-
-      int hourIndex = 0;
-      if (weatherList[myLocationIndex].weeklyWeather.isNotEmpty &&
-          weatherList[myLocationIndex].weeklyWeather[0].allTime != null) {
-        final allTime = weatherList[myLocationIndex].weeklyWeather[0].allTime!;
-        if (allTime.hour.isNotEmpty) {
-          hourIndex = _findNearestHourIndex(allTime);
-        }
-      }
-
-      emit(currentState.copyWith(
-        hourIndex: hourIndex,
-        isDataReady: true,
-      ));
+      WeatherUtils.myLocationIndex = currentState.weatherList
+          .indexWhere((w) => w.name == currentState.myLocation);
+      int hourIndex = _findNearestHour(currentState
+          .weatherList[WeatherUtils.myLocationIndex].weeklyWeather[0].allTime);
+      emit(currentState.copyWith(hourIndex: hourIndex, isDataReady: true));
     }
   }
 
-  Future<void> _onUpdateWeatherData(
+  // Xử lý sự kiện UpdateWeatherData, cập nhật dữ liệu thời tiết (tự động hoặc thủ công)
+  Future<void> _updateWeatherData(
       UpdateWeatherData event, Emitter<WeatherState> emit) async {
     emit(WeatherLoading(isConnected: _isConnected));
     try {
+      List<WeatherModel> weatherList;
       if (_isFirstLoad) {
-        final weatherMap = await databaseService.fetchAllWeatherData();
-        final weatherList = weatherMap.values.toList();
-        if (weatherList.isEmpty) {
-          throw Exception('Không có dữ liệu thời tiết trong Firestore');
-        }
+        weatherList =
+            (await databaseService.fetchAllWeatherData()).values.toList();
         print(
             'Dữ liệu đã được lấy từ Firestore khi khởi động ứng dụng: $weatherList');
-        emit(WeatherLoaded(
-          weatherList: weatherList,
-          isConnected: _isConnected,
-        ));
         _isFirstLoad = false;
       } else {
-        bool isConnected = await NetworkService.isConnected();
-        _isConnected = isConnected;
-        if (!isConnected) {
-          print('Không có kết nối mạng, sử dụng dữ liệu từ Firestore');
-          final weatherMap = await databaseService.fetchAllWeatherData();
-          final weatherList = weatherMap.values.toList();
-          if (weatherList.isEmpty) {
-            throw Exception('Không có dữ liệu thời tiết trong Firestore');
-          }
-          emit(WeatherLoaded(weatherList: weatherList, isConnected: false));
-          return;
-        }
-
-        final updatedWeatherList = await weatherService.fetchWeatherData();
+        weatherList = await _getWeatherData();
         print(
-            'Dữ liệu đã được lấy từ API (tự động hoặc thủ công): $updatedWeatherList');
-        if (state is WeatherLoaded) {
-          final currentState = state as WeatherLoaded;
-          emit(currentState.copyWith(
-            weatherList: updatedWeatherList,
-            isConnected: true,
-          ));
-        } else {
-          emit(WeatherLoaded(
-              weatherList: updatedWeatherList, isConnected: true));
-        }
+            'Dữ liệu đã được lấy từ API (tự động hoặc thủ công): $weatherList');
+        _showNextHourNotification(weatherList);
       }
+      emit(WeatherLoaded(weatherList: weatherList, isConnected: _isConnected));
       add(InitializeData());
     } catch (e) {
-      if (state is WeatherLoaded) {
-        emit(state);
-      } else {
-        emit(WeatherError('Không thể tải dữ liệu: $e',
-            isConnected: _isConnected));
-      }
+      print('Lỗi khi cập nhật dữ liệu: $e');
+      emit(state is WeatherLoaded
+          ? state
+          : WeatherError('Lỗi tải dữ liệu: $e', isConnected: _isConnected));
     }
   }
 
-  Future<void> _onSelectCity(
-      SelectCity event, Emitter<WeatherState> emit) async {
+  // Xử lý sự kiện SelectCity, cập nhật thành phố được chọn và các thông tin liên quan
+  Future<void> _selectCity(SelectCity event, Emitter<WeatherState> emit) async {
     if (state is WeatherLoaded) {
       final currentState = state as WeatherLoaded;
-      final weatherList = currentState.weatherList;
-
-      int newLocationIndex = 0;
-      for (var i = 0; i < weatherList.length; i++) {
-        if (weatherList[i].name == event.cityName) {
-          newLocationIndex = i;
-          break;
-        }
-      }
-      StaticFile.myLocationIndex = newLocationIndex;
-
-      int hourIndex = 0;
-      if (weatherList[newLocationIndex].weeklyWeather.isNotEmpty &&
-          weatherList[newLocationIndex].weeklyWeather[0].allTime != null) {
-        final allTime = weatherList[newLocationIndex].weeklyWeather[0].allTime!;
-        if (allTime.hour.isNotEmpty) {
-          hourIndex = _findNearestHourIndex(allTime);
-        }
-      }
-
+      WeatherUtils.myLocationIndex =
+          currentState.weatherList.indexWhere((w) => w.name == event.cityName);
+      int hourIndex = _findNearestHour(currentState
+          .weatherList[WeatherUtils.myLocationIndex].weeklyWeather[0].allTime);
+      _showNextHourNotification(currentState.weatherList);
       emit(currentState.copyWith(
-        myLocation: event.cityName,
-        hourIndex: hourIndex,
-        isDataReady: true,
-      ));
+          myLocation: event.cityName, hourIndex: hourIndex, isDataReady: true));
     }
   }
 
-  int _findNearestHourIndex(AllTime allTime) {
-    DateTime now = DateTime.now();
-    int currentHour = now.hour;
-    int nearestIndex = 0;
-    int minDiff = 24;
-    int nearestPastIndex = -1;
-    int minPastDiff = 24;
+  // --- Hàm quản lý tài nguyên ---
 
-    for (int i = 0; i < allTime.hour.length; i++) {
-      String hourStr = allTime.hour[i];
-      int hour = int.parse(hourStr.split(":")[0]);
-      int diff = (hour - currentHour).abs();
+  // Thiết lập một bộ đếm thời gian để tự động cập nhật dữ liệu thời tiết mỗi giờ
+  void _startUpdateTimer() {
+    _updateTimer =
+        Timer.periodic(Duration(hours: 1), (_) => add(UpdateWeatherData()));
+  }
 
-      if (diff < minDiff) {
-        minDiff = diff;
-        nearestIndex = i;
-      }
-
-      if (hour <= currentHour) {
-        int pastDiff = (hour - currentHour).abs();
-        if (pastDiff < minPastDiff) {
-          minPastDiff = pastDiff;
-          nearestPastIndex = i;
-        }
-      }
-    }
-
-    return nearestPastIndex != -1 ? nearestPastIndex : nearestIndex;
+  // Hủy các tài nguyên khi WeatherBloc bị hủy để tránh rò rỉ bộ nhớ
+  @override
+  Future<void> close() {
+    _updateTimer?.cancel();
+    _connectivitySubscription?.cancel();
+    return super.close();
   }
 }

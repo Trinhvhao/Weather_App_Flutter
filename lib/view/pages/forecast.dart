@@ -2,10 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:trinh_van_hao/bloc/weather_bloc.dart';
 import 'package:trinh_van_hao/bloc/weather_state.dart';
-import 'package:trinh_van_hao/utils/static_file.dart';
+import 'package:trinh_van_hao/utils/weather_utils.dart';
 import 'package:intl/intl.dart';
 import 'package:trinh_van_hao/view/widgets/item.dart';
 
@@ -68,9 +69,9 @@ class _ForecastState extends State<Forecast> {
                 );
               }
 
-              if (StaticFile.myLocationIndex < 0 ||
-                  StaticFile.myLocationIndex >= weatherList.length ||
-                  weatherList[StaticFile.myLocationIndex]
+              if (WeatherUtils.myLocationIndex < 0 ||
+                  WeatherUtils.myLocationIndex >= weatherList.length ||
+                  weatherList[WeatherUtils.myLocationIndex]
                       .weeklyWeather
                       .isEmpty) {
                 return const Center(
@@ -87,13 +88,16 @@ class _ForecastState extends State<Forecast> {
               }
 
               final currentDayWeather =
-                  weatherList[StaticFile.myLocationIndex].weeklyWeather[0];
+                  weatherList[WeatherUtils.myLocationIndex].weeklyWeather[0];
               final allTime = currentDayWeather.allTime;
               final hourCount = allTime?.hour.length ?? 0;
 
+              // Khởi tạo dữ liệu locale tiếng Việt
+              initializeDateFormatting('vi', null);
               // Lấy ngày hiện tại
               final today = DateTime.now();
-              final todayFormatted = DateFormat('d MMMM yyyy').format(today);
+              final todayFormatted =
+                  DateFormat('d MMMM yyyy', 'vi').format(today);
 
               return SingleChildScrollView(
                 child: Container(
@@ -239,7 +243,7 @@ class _ForecastState extends State<Forecast> {
                       Container(
                         height: myHeight * 0.4,
                         child: ListView.builder(
-                          itemCount: weatherList[StaticFile.myLocationIndex]
+                          itemCount: weatherList[WeatherUtils.myLocationIndex]
                               .weeklyWeather
                               .length,
                           itemBuilder: (context, index) {
@@ -252,7 +256,7 @@ class _ForecastState extends State<Forecast> {
                             final dayFormatted =
                                 int.parse(DateFormat('d').format(targetDate));
                             return Item(
-                              item: weatherList[StaticFile.myLocationIndex]
+                              item: weatherList[WeatherUtils.myLocationIndex]
                                   .weeklyWeather[index],
                               day: dayFormatted,
                             );
