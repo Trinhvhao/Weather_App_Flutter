@@ -11,15 +11,12 @@ import 'weather_event.dart';
 import 'weather_state.dart';
 
 class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
-  // Instance của WeatherService dùng để lấy dữ liệu thời tiết từ API
   final WeatherService weatherService;
-  // Instance của DatabaseService dùng để tương tác với Firestore
+  
   final DatabaseService databaseService;
-  // Bộ đếm thời gian để tự động cập nhật dữ liệu mỗi giờ.
+
   Timer? _updateTimer;
-  // Biến boolean để kiểm tra lần tải đầu tiên
   bool _isFirstLoad = true;
-  // Biến boolean để theo dõi trạng thái kết nối mạng.
   bool _isConnected = true;
   // Đăng ký lắng nghe sự thay đổi kết nối
   StreamSubscription? _connectivitySubscription;
@@ -27,7 +24,8 @@ class WeatherBloc extends Bloc<WeatherEvent, WeatherState> {
   // Khởi tạo WeatherBloc và thiết lập các xử lý ban đầu
   WeatherBloc(this.weatherService, this.databaseService)
       : super(WeatherInitial(isConnected: true)) {
-    on<FetchWeather>(_fetchWeather);
+    on<FetchWeather>(
+        _fetchWeather); //  Đăng ký một event handler trong Flutter Bloc để xử lý sự kiện FetchWeather.
     on<SelectHour>(_selectHour);
     on<SwitchTab>(_switchTab);
     on<InitializeData>(_initializeData);

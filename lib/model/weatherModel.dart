@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+// Lớp tổng quát lưu trữ thông tin thời tiết của một thành phố
 class WeatherModel extends Equatable {
   final String? name;
   final List<WeeklyWeather> weeklyWeather;
@@ -12,7 +13,7 @@ class WeatherModel extends Equatable {
     this.airQuality,
     this.lastUpdated,
   });
-
+//  Chuyển đổi dữ liệu JSON từ API/Firestore thành một object WeatherModel.
   factory WeatherModel.fromJson(Map<String, dynamic> json) {
     return WeatherModel(
       name: json['name'] as String? ?? 'Unknown',
@@ -28,7 +29,7 @@ class WeatherModel extends Equatable {
           : null,
     );
   }
-
+// Chuyển object WeatherModel thành JSON để gửi lên server hoặc lưu vào Firestore.
   Map<String, dynamic> toJson() {
     return {
       'name': name,
@@ -42,6 +43,7 @@ class WeatherModel extends Equatable {
   List<Object?> get props => [name, weeklyWeather, airQuality, lastUpdated];
 }
 
+// Lớp lưu trữ thông tin thời tiết của một ngày cụ thể
 class WeeklyWeather extends Equatable {
   final String? description;
   final String? mainImg;
@@ -79,6 +81,7 @@ class WeeklyWeather extends Equatable {
   List<Object?> get props => [description, mainImg, allTime, avgTemp];
 }
 
+// Lớp lưu trữ dữ liệu thời tiết theo giờ trong 1 ngày
 class AllTime extends Equatable {
   final List<String> hour;
   final List<String> img;
@@ -130,6 +133,7 @@ class AllTime extends Equatable {
   List<Object?> get props => [hour, img, temps, wind, humidities];
 }
 
+// Lớp lưu trữ thông tin chất lượng không khí
 class AirQuality extends Equatable {
   final int? aqi;
   final Map<String, double>? components;
